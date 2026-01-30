@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserContext } from '../UserContext';
 import { verifyOtp } from '../api/auth';
 
@@ -12,22 +13,49 @@ const OtpScreen = ({ navigation }) => {
   const { user, setUser } = useContext(UserContext);
 
   const handleVerify = async () => {
-    if (otp.length === 4 && /^\d+$/.test(otp)) {
+    if (otp.length === 6 && /^\d+$/.test(otp)) {
       setError('');
       setLoading(true);
       try {
-        const data = await verifyOtp(user.phone, otp);
-        // Store token in context
-        setUser(prev => ({ ...prev, token: data.accessToken }));
-        // Navigate
-        navigation.replace('Onboarding');
+        const responseData = await verifyOtp(user.phone, otp);
+        console.log('Verify OTP Response:', JSON.stringify(responseData));
+
+        // Handle potential nesting (data.data.accessToken vs data.accessToken)
+        const accessToken = responseData.accessToken || responseData.data?.accessToken;
+
+        if (!accessToken) {
+          throw new Error('Access Token missing in response');
+        }
+
+        // Store token in context and persist it
+        await AsyncStorage.setItem('userToken', accessToken);
+
+        const collector = responseData.collector || responseData.data?.collector;
+
+        // Check if profile is complete (has name)
+        if (collector && collector.name) {
+          // Split name for context if needed, or just set user
+          const nameParts = collector.name.split(' ');
+          setUser({
+            token: accessToken,
+            firstName: nameParts[0],
+            lastName: nameParts.slice(1).join(' '),
+            upiId: collector.upiId,
+            vanNo: collector.assignedRoute,
+            phone: user.phone
+          });
+          navigation.replace('MainTabs'); // Go straight to Home
+        } else {
+          setUser(prev => ({ ...prev, token: accessToken }));
+          navigation.replace('Onboarding');
+        }
       } catch (err) {
         setError(err.message || 'Invalid OTP');
       } finally {
         setLoading(false);
       }
     } else {
-      setError('Enter a valid 4-digit OTP');
+      setError('Enter a valid 6-digit OTP');
     }
   };
 
@@ -35,7 +63,7 @@ const OtpScreen = ({ navigation }) => {
     <View style={styles.container}>
       <Text style={styles.pageTitle}>Verify OTP</Text>
       <View style={styles.card}>
-        <Text style={styles.subtitle}>Enter the 4-digit code</Text>
+        <Text style={styles.subtitle}>Enter the 6-digit code</Text>
         <Text style={styles.label}>OTP Code</Text>
         <View style={styles.inputRow}>
           <Ionicons name="lock-closed-outline" size={22} color="#888" style={styles.icon} />
@@ -45,7 +73,7 @@ const OtpScreen = ({ navigation }) => {
             keyboardType="number-pad"
             value={otp}
             onChangeText={setOtp}
-            maxLength={4}
+            maxLength={6}
           />
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}

@@ -22,20 +22,39 @@ const OnboardingScreen = ({ navigation }) => {
 
   const [error, setError] = useState('');
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!firstName.trim() || !lastName.trim() || !upiId.trim() || !vanNo.trim()) {
       setError('Please fill all required fields.');
       return;
     }
     setError('');
-    setUser(prev => ({
-      ...prev,
-      firstName,
-      lastName,
-      upiId,
-      vanNo,
-    }));
-    navigation.replace('ProfilePicture');
+
+    try {
+      // Save to backend
+      // We need the token from context or storage. Context usually has it.
+      // Assuming user.token is available
+      if (user.token) {
+        const { updateProfile } = require('../api/auth');
+        await updateProfile(user.token, {
+          firstName,
+          lastName,
+          upiId,
+          vanNo
+        });
+      }
+
+      setUser(prev => ({
+        ...prev,
+        firstName,
+        lastName,
+        upiId,
+        vanNo,
+      }));
+      navigation.replace('ProfilePicture');
+    } catch (err) {
+      console.log('Save profile error', err);
+      setError('Failed to save profile. Please try again.');
+    }
   };
 
   return (

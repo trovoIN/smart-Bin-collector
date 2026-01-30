@@ -44,6 +44,9 @@ const MobileNumberScreen = ({ navigation }) => {
             maxLength={10}
           />
         </View>
+        <Text style={{ color: '#888', fontSize: 12, marginBottom: 10, alignSelf: 'center' }}>
+          Demo? Try: 9111111111
+        </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <TouchableOpacity style={styles.button} onPress={handleNext} disabled={loading}>
           <Text style={styles.buttonText}>{loading ? 'Sending...' : 'Send OTP'}</Text>

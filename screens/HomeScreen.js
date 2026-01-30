@@ -17,6 +17,8 @@ import {
 import { UserContext } from '../UserContext';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { resolveQr, takeUpUnit } from '../api/qr';
+import { markCollection } from '../api/collections';
 
 
 const HomeScreen = () => {
@@ -43,12 +45,121 @@ const HomeScreen = () => {
       }
     }
     setScanning(true);
+    setScanned(false);
+  };
+
+  const [scanned, setScanned] = useState(false);
+
+  const handleBarCodeScanned = async ({ type, data }) => {
+    if (scanned) return;
+    setScanned(true);
+    setScanning(false);
+
+    try {
+      // Extract token if it's a URL
+      let qrToken = data;
+      if (data.includes('/qr/')) {
+        qrToken = data.split('/qr/')[1];
+      }
+
+      // 1. Resolve QR
+      const result = await resolveQr(qrToken);
+
+      if (result.status === 'ACTIVE' && result.unit) {
+
+        // CHECK IF UNASSIGNED (Specific request: "Take Up & Collect")
+        console.log('Unit Collector Name:', result.unit.collectorName); // DEBUG
+
+        if (result.unit.collectorName === 'Unassigned' || !result.unit.collectorName) {
+          Alert.alert(
+            'Unassigned Household',
+            'This household has no collector. Do you want to take it up and collect waste?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Take Up & Collect',
+                onPress: async () => {
+                  try {
+                    console.log('Attempting to take up unit...');
+                    // 1. Take Up (Assign)
+                    await takeUpUnit(qrToken);
+                    console.log('Unit taken up successfully');
+
+                    // 2. Collect Waste
+                    await markCollection(result.unit.id);
+                    console.log('Collection marked');
+
+                    Alert.alert('Success', 'Unit assigned and collection recorded!');
+                  } catch (err) {
+                    console.error('Take Up Error:', err);
+                    Alert.alert('Error', 'Failed to process: ' + err.message);
+                  }
+                }
+              }
+            ]
+          );
+          return;
+        }
+
+        // 2. Already Assigned - Confirm Collection
+        Alert.alert(
+          'Unit Found',
+          `Unit: ${result.unit.unitNumber}\nOwner: ${result.unit.householdPhone || 'N/A'}\nCollector: ${result.unit.collectorName}`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Collect Waste',
+              onPress: async () => {
+                try {
+                  await markCollection(result.unit.id);
+                  Alert.alert('Success', 'Collection Recorded! Notification sent to user.');
+                } catch (err) {
+                  Alert.alert('Error', err.message);
+                }
+              }
+            }
+          ]
+        );
+      } else if (result.status === 'UNASSIGNED') {
+        // Alert.alert('New QR Code', 'This QR is not assigned to any unit yet.');
+        Alert.alert(
+          'Unassigned Unit',
+          'This unit has no collector. Do you want to take it up?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Take Up',
+              onPress: async () => {
+                try {
+                  const { takeUpUnit } = require('../api/qr');
+                  await takeUpUnit(qrToken);
+                  Alert.alert('Success', 'You have been assigned to this unit!');
+                } catch (err) {
+                  Alert.alert('Error', err.message);
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert('Invalid QR', 'Status: ' + result.status);
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    }
   };
 
   if (scanning) {
     return (
       <View style={styles.cameraContainer}>
-        <CameraView style={{ flex: 1 }} facing="back" />
+        <CameraView
+          style={{ flex: 1 }}
+          facing="back"
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ["qr"],
+          }}
+        />
         <TouchableOpacity style={styles.closeButton} onPress={() => setScanning(false)}>
           <Ionicons name="close" size={30} color="#fff" />
         </TouchableOpacity>
@@ -78,14 +189,14 @@ const HomeScreen = () => {
       <ScrollView contentContainerStyle={{ alignItems: 'center', width: '100%' }} showsVerticalScrollIndicator={false}>
         {/* Home Image Card */}
         <View style={styles.waveCard}>
-          <Image 
-            source={require('../assets/home.jpeg')} 
-            style={styles.homeImage} 
-            resizeMode="cover" 
+          <Image
+            source={require('../assets/home.jpeg')}
+            style={styles.homeImage}
+            resizeMode="cover"
           />
           {/* Overlay to ensure text readability */}
           <View style={styles.overlay} />
-          
+
           <View style={styles.waveContent}>
             <Text style={styles.greeting}>Good Morning, {user?.firstName || 'John'}!</Text>
             <Text style={styles.bill}>Bill Amount : Rs. 500</Text>
@@ -138,12 +249,12 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', paddingTop: 50 },
   cameraContainer: { flex: 1, backgroundColor: 'black' },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    marginBottom: 20 
+    marginBottom: 20
   },
   logoText: { fontSize: 24, fontWeight: 'bold', color: '#1f7a5a' },
   headerIcons: { flexDirection: 'row', alignItems: 'center', gap: 15 },
@@ -178,14 +289,14 @@ const styles = StyleSheet.create({
   number: { color: '#fff', fontSize: 18, marginTop: 15, fontWeight: '500' },
   grid: { width: '92%' },
   gridRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  gridItem: { 
-    width: '31%', 
-    backgroundColor: '#fff', 
-    borderRadius: 18, 
-    alignItems: 'center', 
-    paddingVertical: 20, 
-    borderWidth: 1, 
-    borderColor: '#f0f0f0', 
+  gridItem: {
+    width: '31%',
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
     elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -193,16 +304,16 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
   },
   gridText: { marginTop: 8, fontSize: 13, fontWeight: '600', color: '#444' },
-  scannerButton: { 
-    position: 'absolute', 
-    bottom: 30, 
+  scannerButton: {
+    position: 'absolute',
+    bottom: 30,
     alignSelf: 'center',
-    backgroundColor: '#1f7a5a', 
-    width: 70, 
-    height: 70, 
-    borderRadius: 35, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
+    backgroundColor: '#1f7a5a',
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    alignItems: 'center',
+    justifyContent: 'center',
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },

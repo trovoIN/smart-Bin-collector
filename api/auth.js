@@ -7,13 +7,14 @@ export const requestOtp = async (phone) => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ phone: `+91${phone}`, role: 'COLLECTOR' }),
+            body: JSON.stringify({ phone: `+91${phone}`, userType: 'collector' }),
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || 'Failed to request OTP');
+            const errorMessage = data.error?.message || data.error || 'Failed to request OTP';
+            throw new Error(errorMessage);
         }
 
         return data;
@@ -30,13 +31,14 @@ export const verifyOtp = async (phone, otp) => {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ phone: `+91${phone}`, otp }),
+            body: JSON.stringify({ phone: `+91${phone}`, code: otp, userType: 'collector' }),
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || 'Failed to verify OTP');
+            const errorMessage = data.error?.message || data.error || 'Failed to verify OTP';
+            throw new Error(errorMessage);
         }
 
         return data;
