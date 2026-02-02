@@ -1,7 +1,7 @@
 // Basic configuration for API
 // REPLACE with your computer's IP address if testing on physical device
 // For Android Emulator, use 'http://10.0.2.2:3000/api'
-export const API_BASE_URL = 'http://192.168.0.105:3000/api';
+export const API_BASE_URL = 'https://smart-bin-backend-bvo8.onrender.com/api';
 
 export const endpoints = {
     auth: {
